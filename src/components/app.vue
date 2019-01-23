@@ -2,7 +2,10 @@
   <div class="app">
     <div v-if="loaded && configured" :style="{zoom}">
       <div class="projects">
-        <project-card v-for="project in sortedProjects" :key="project.id" :project-id="project.id" v-model="project.last_activity_at" />
+        <project-card v-for="project in sortedProjects"
+                      :__privateInternalGitlabToken="project.__privateInternalGitlabToken"
+                      :__privateInternalGitlabUrl="project.__privateInternalGitlabUrl"
+                      :key="project.id" :project-id="project.id" v-model="project.last_activity_at" />
       </div>
     </div>
     <div v-else-if="!configured" class="container">
@@ -61,8 +64,6 @@
     },
     beforeMount() {
       this.reloadConfig();
-
-      console.log(Config.root);
     },
     beforeDestroy() {
       clearInterval(this.refreshIntervalId);
@@ -90,21 +91,30 @@
           gitlabApiParams.membership = membership;
         }
 
-        const projects = await this.$api('/projects', gitlabApiParams, {follow_next_page_links: fetchCount > 100});
+        for (const api of Config.root.apis) {
+          const params = {...gitlabApiParams, ...api};
+          const projects = await this.$api('/projects', params, {follow_next_page_links: true});
 
-        // Only show projects that have jobs enabled
-        const maxAge = Config.root.maxAge;
+          // Only show projects that have jobs enabled
+          const maxAge = Config.root.maxAge;
 
-        this.projects = projects.filter(project => {
-          return project.jobs_enabled &&
-            (maxAge === 0 || ((new Date() - new Date(project.last_activity_at)) / 1000 / 60 / 60 <= maxAge)) &&
-            (
-              project.path_with_namespace.match(new RegExp(Config.root.filter.include)) && (
-                Config.root.filter.exclude === null ||
-                !project.path_with_namespace.match(new RegExp(Config.root.filter.exclude))
-              )
-            );
-        });
+          this.projects = [...this.projects, ...projects.filter(project => {
+            return project.jobs_enabled &&
+              (maxAge === 0 || ((new Date() - new Date(project.last_activity_at)) / 1000 / 60 / 60 <= maxAge)) &&
+              (
+                project.path_with_namespace.match(new RegExp(Config.root.filter.include)) && (
+                  Config.root.filter.exclude === null ||
+                  !project.path_with_namespace.match(new RegExp(Config.root.filter.exclude))
+                )
+              );
+          }).map(project => {
+            return {
+              __privateInternalGitlabUrl: api.gitlabApi,
+              __privateInternalGitlabToken: api.privateToken,
+              ...project
+            }
+          })];
+        }
 
         if (Config.root.autoZoom) {
           this.$nextTick(() => this.autoZoom());

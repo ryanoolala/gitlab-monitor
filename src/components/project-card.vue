@@ -1,23 +1,23 @@
 <template>
   <div v-if="showPipelinesOnly ? (pipelineCount > 0) : true" :class="['project-card', status]">
     <div class="content">
-      <div class="title small">{{ project !== null ? project.namespace.name : '...' }} /</div>
+      <!--<div class="title small">{{ project !== null ? project.namespace.name : '...' }} /</div>-->
       <a class="title" target="_blank" rel="noopener noreferrer" :href="project !== null ? project.web_url : '#'">
-        {{ project !== null ? project.name : 'Loading project...' }}
+        {{ project !== null ? project.name.toUpperCase() : 'Loading project...' }}
       </a>
-      <div class="pipeline-container">
-        <em v-if="pipelines !== null && pipelineCount === 0" class="no-pipelines">
-          No recent pipelines
-        </em>
-        <div v-else-if="pipelines !== null">
-          <template v-for="refName in refNames">
-            <div v-for="(pipeline, index) in pipelines[refName]" :key="pipeline.id">
-              <pipeline-view :pipeline="pipeline" :project="project" :show-branch="index === 0" />
-            </div>
-          </template>
-        </div>
-        <octicon v-else name="sync" scale="1.4" spin />
-      </div>
+      <!--<div class="pipeline-container">-->
+        <!--<em v-if="pipelines !== null && pipelineCount === 0" class="no-pipelines">-->
+          <!--No recent pipelines-->
+        <!--</em>-->
+        <!--<div v-else-if="pipelines !== null">-->
+          <!--<template v-for="refName in refNames">-->
+            <!--<div v-for="(pipeline, index) in pipelines[refName]" :key="pipeline.id">-->
+              <!--<pipeline-view :pipeline="pipeline" :project="project" :show-branch="index === 0" />-->
+            <!--</div>-->
+          <!--</template>-->
+        <!--</div>-->
+        <!--<octicon v-else name="sync" scale="1.4" spin />-->
+      <!--</div>-->
     </div>
     <div class="spacer"></div>
     <div class="info">
@@ -45,7 +45,7 @@
       Octicon
     },
     name: 'project-card',
-    props: ['project-id'],
+    props: ['project-id', '__privateInternalGitlabUrl', '__privateInternalGitlabToken'],
     data: () => ({
       project: null,
       pipelines: null,
@@ -135,14 +135,22 @@
     methods: {
       async fetchProject() {
         this.loading = true;
+        const __privateInternalGitlabCredential = {
+          privateToken: this.__privateInternalGitlabToken,
+          gitlabApi: this.__privateInternalGitlabUrl,
+        };
 
-        this.project = await this.$api(`/projects/${this.projectId}`);
+        this.project = await this.$api(`/projects/${this.projectId}`, __privateInternalGitlabCredential);
         this.$emit('input', this.project.last_activity_at);
 
         this.loading = false;
       },
       async fetchPipelines() {
         this.loading = true;
+        const __privateInternalGitlabCredential = {
+          privateToken: this.__privateInternalGitlabToken,
+          gitlabApi: this.__privateInternalGitlabUrl,
+        };
 
         const maxAge = Config.root.maxAge;
         const showMerged = this.showMerged;
@@ -150,7 +158,7 @@
         const fetchCount = Config.root.fetchCount;
 
         const branches = await this.$api(`/projects/${this.projectId}/repository/branches`, {
-            per_page: fetchCount > 100 ? 100 : fetchCount
+            per_page: fetchCount > 100 ? 100 : fetchCount, ...__privateInternalGitlabCredential,
           }, {follow_next_page_links: fetchCount > 100});
         const branchNames = branches.filter(branch => showMerged ? true : !branch.merged)
                                     .sort((a, b) => new Date(b.commit.committed_date).getTime() - new Date(a.commit.committed_date).getTime()).reverse()
@@ -168,18 +176,17 @@
         let tags = [];
         if (showTags) {
           tags = await this.$api(`/projects/${this.projectId}/repository/tags`, {
-              per_page: fetchCount > 100 ? 100 : fetchCount
+              per_page: fetchCount > 100 ? 100 : fetchCount, ...__privateInternalGitlabCredential
             }, {follow_next_page_links: fetchCount > 100});
         }
         const tagNames = tags.map((tag) => tag.name)
         const newPipelines = {};
         let count = 0;
         const refNames = branchNames.concat(tagNames).concat("master");
-        console.log(refNames);
         for (const refName of refNames) {
           const pipelines = await this.$api(`/projects/${this.projectId}/pipelines`, {
             ref: refName,
-            per_page: fetchCount > 100 ? 100 : fetchCount
+            per_page: fetchCount > 100 ? 100 : fetchCount, ...__privateInternalGitlabCredential
           }, {follow_next_page_links: fetchCount > 100});
 
           const resolvedPipelines = [];
@@ -194,14 +201,14 @@
             }
 
             for (const pipeline of filteredPipelines) {
-              const resolvedPipeline = await this.$api(`/projects/${this.projectId}/pipelines/${pipeline.id}`);
+              const resolvedPipeline = await this.$api(`/projects/${this.projectId}/pipelines/${pipeline.id}`, __privateInternalGitlabCredential);
               if ((maxAge === 0 || ((new Date() - new Date(resolvedPipeline.updated_at)) / 1000 / 60 / 60 <= maxAge))) {
                 resolvedPipelines.push(resolvedPipeline);
               }
             }
 
             if (pipelines.length >= 1 && filteredPipelines.length === 0) {
-              const resolvedPipeline = await this.$api(`/projects/${this.projectId}/pipelines/${pipelines[0].id}`);
+              const resolvedPipeline = await this.$api(`/projects/${this.projectId}/pipelines/${pipelines[0].id}`, __privateInternalGitlabCredential);
               if ((maxAge === 0 || ((new Date() - new Date(resolvedPipeline.updated_at)) / 1000 / 60 / 60 <= maxAge))) {
                 newPipelines[refName] = [resolvedPipeline];
                 count++;
@@ -258,10 +265,11 @@
 
     .content {
       padding: 12px;
+      text-align: center;
 
       .title {
         white-space: nowrap;
-        font-size: 16px;
+        font-size: 3em;
         font-weight: bold;
         text-shadow: 1.5px 1.5px rgba(0, 0, 0, 0.4);
         text-decoration: none;
