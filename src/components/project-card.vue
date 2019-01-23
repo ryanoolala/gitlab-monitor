@@ -174,7 +174,8 @@
         const tagNames = tags.map((tag) => tag.name)
         const newPipelines = {};
         let count = 0;
-        const refNames = branchNames.concat(tagNames)
+        const refNames = branchNames.concat(tagNames).concat("master");
+        console.log(refNames);
         for (const refName of refNames) {
           const pipelines = await this.$api(`/projects/${this.projectId}/pipelines`, {
             ref: refName,
