@@ -90,6 +90,7 @@
         {
           gitlabApiParams.membership = membership;
         }
+        this.projects = [];
 
         for (const api of Config.root.apis) {
           const params = {...gitlabApiParams, ...api};
